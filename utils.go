@@ -11,3 +11,11 @@ func Json(data interface{}) string {
 		return string(val)
 	}
 }
+
+func Map(data string) map[string]interface{} {
+	var mp map[string]interface{}
+	if err := json.Unmarshal([]byte(data), &mp); err != nil {
+		return nil
+	}
+	return mp
+}

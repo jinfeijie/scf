@@ -10,11 +10,22 @@ type Handler func(ctx *Context) Reply
 
 var router = make(map[string]map[string]Handler)
 
+type TrafficModeType int
+
+const (
+	TrafficModeUnknown = TrafficModeType(iota)
+	TrafficModeGW
+	TrafficModeServe
+)
+
 type Scf struct {
+	TrafficMode TrafficModeType
 }
 
 func New() *Scf {
-	return &Scf{}
+	return &Scf{
+		TrafficMode: TrafficModeServe,
+	}
 }
 
 func (scf *Scf) Use(handlers ...Handler) {
@@ -57,7 +68,7 @@ func (scf *Scf) ANY(path string, handler Handler) {
 }
 
 func (scf *Scf) Run() {
-	cloudfunction.Start(scf.Server)
+	cloudfunction.Start(scf.ServerWarp)
 }
 
 type Req struct {
@@ -71,6 +82,42 @@ type Req struct {
 	QueryStringParameters map[string]string      `json:"queryStringParameters"`
 	RequestContext        map[string]interface{} `json:"requestContext"`
 	StageVariables        map[string]string      `json:"stageVariables"`
+}
+
+func (scf *Scf) ServerWarp(ctx context.Context, r *Req) (resp map[string]interface{}, err error) {
+	rly, err := scf.Server(ctx, r)
+	contentType := rly.ContentType
+	rly.ContentType = ""
+	resp = make(map[string]interface{})
+	resp = Map(Json(rly))
+	switch scf.TrafficMode {
+	case TrafficModeGW:
+		body := ""
+		switch contentType {
+		case ContentTypeJson:
+			body = Json(rly)
+		case ContentTypeHtml:
+			_body, ok := rly.Data.(string)
+			if ok {
+				body = _body
+			}
+		}
+		gw := GWReply{
+			IsBase64Encoded: false,
+			StatusCode:      rly.Code,
+			Headers: map[string]interface{}{
+				"Content-Type": contentType,
+			},
+			Body: body,
+		}
+		resp = Map(Json(gw))
+	}
+
+	return resp, err
+}
+
+func (scf *Scf) SetTrafficMode(modeType TrafficModeType) {
+	scf.TrafficMode = modeType
 }
 
 func (scf *Scf) Server(_ context.Context, r *Req) (Reply, error) {
