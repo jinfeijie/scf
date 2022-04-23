@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/tencentyun/scf-go-lib/cloudfunction"
 	"net/http"
+	"reflect"
 )
 
 type Handler func(ctx *Context) Reply
@@ -47,6 +48,10 @@ func (scf *Scf) POST(path string, handler Handler) {
 	scf.Route(http.MethodPost, path, handler)
 }
 
+func (scf *Scf) OPTIONS(path string, handler Handler) {
+	scf.Route(http.MethodOptions, path, handler)
+}
+
 func (scf *Scf) PUT(path string, handler Handler) {
 	scf.Route(http.MethodPut, path, handler)
 }
@@ -88,6 +93,8 @@ func (scf *Scf) ServerWarp(ctx context.Context, r *Req) (resp map[string]interfa
 	rly, err := scf.Server(ctx, r)
 	contentType := rly.ContentType
 	rly.ContentType = ""
+	header := rly.Header
+	rly.Header = nil
 	resp = make(map[string]interface{})
 	resp = Map(Json(rly))
 	switch scf.TrafficMode {
@@ -102,13 +109,24 @@ func (scf *Scf) ServerWarp(ctx context.Context, r *Req) (resp map[string]interfa
 				body = _body
 			}
 		}
+
+		headers := make(map[string]interface{})
+		for key, value := range Map(Json(header)) {
+			valueOf := reflect.ValueOf(value)
+			if valueOf.Len() == 1 {
+				headers[key] = valueOf.Index(0).Interface()
+			} else {
+				headers[key] = value
+			}
+		}
+
+		headers["Content-Type"] = contentType
+
 		gw := GWReply{
 			IsBase64Encoded: false,
 			StatusCode:      rly.Code,
-			Headers: map[string]interface{}{
-				"Content-Type": contentType,
-			},
-			Body: body,
+			Headers:         headers,
+			Body:            body,
 		}
 		resp = Map(Json(gw))
 	}

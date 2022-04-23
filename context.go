@@ -27,6 +27,9 @@ type Context struct {
 	paramMap       map[string]string
 	StageVariables map[string]string
 	RealIp         string
+
+	// RESPONSE
+	responseHeader http.Header
 }
 
 func NewContext(r *Req) *Context {
@@ -144,18 +147,20 @@ func (c *Context) BuildCtx(r *Req) {
 	for k, v := range r.QueryStringParameters {
 		c.Param.Set(k, v)
 	}
+
+	c.responseHeader = http.Header{}
 }
 
-func (c *Context) GWWarp(reply Reply) GWReply {
-	return GWReply{
-		IsBase64Encoded: false,
-		StatusCode:      reply.Code,
-		Headers: map[string]interface{}{
-			"Content-Type": "application/json; charset=utf-8",
-		},
-		Body: Json(reply),
-	}
-}
+//func (c *Context) GWWarp(reply Reply) GWReply {
+//	return GWReply{
+//		IsBase64Encoded: false,
+//		StatusCode:      reply.Code,
+//		Headers: map[string]interface{}{
+//			"Content-Type": "application/json; charset=utf-8",
+//		},
+//		Body: Json(reply),
+//	}
+//}
 
 func (c *Context) NotFound() Reply {
 	return c.JSONCode(404, "404 page not found", "["+c.Method+"] "+c.path)
@@ -180,6 +185,7 @@ func (c *Context) HtmlCode(code int, msg string, data string) Reply {
 func (c *Context) Reply(contentType string, code int, msg string, data interface{}) Reply {
 	return Reply{
 		ContentType: contentType,
+		Header:      c.responseHeader,
 		Code:        code,
 		Msg:         msg,
 		Data:        data,
@@ -187,6 +193,10 @@ func (c *Context) Reply(contentType string, code int, msg string, data interface
 		TraceId:     c.traceId,
 		UnixTime:    time.Now().Unix(),
 	}
+}
+
+func (c *Context) ReplyHeader(key string, value string) {
+	c.responseHeader.Add(key, value)
 }
 
 func (c *Context) BodyBind(data interface{}) error {

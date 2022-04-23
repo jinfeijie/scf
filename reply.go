@@ -1,10 +1,13 @@
 package scf
 
+import "net/http"
+
 type Reply struct {
 	Code        int         `json:"code"`
 	Msg         string      `json:"msg"`
 	Data        interface{} `json:"data"`
 	ContentType string      `json:"content_type,omitempty"`
+	Header      http.Header `json:"header,omitempty"`
 	RequestId   string      `json:"request_id"`
 	TraceId     string      `json:"trace_id"`
 	UnixTime    int64       `json:"unix_time"`
