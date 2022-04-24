@@ -32,9 +32,53 @@ type Context struct {
 	responseHeader http.Header
 }
 
-func NewContext(r *Req) *Context {
-	c := &Context{}
-	c.BuildCtx(r)
+func (c *Context) Reset() *Context {
+	c.m = sync.Map{}
+	c.Headers = http.Header{}
+	c.request = nil
+	c.Method = ""
+	c.requestId = ""
+	c.traceId = ""
+	c.serviceId = ""
+	c.path = ""
+	c.Body = nil
+	c.Query = url.Values{}
+	c.queryMap = nil
+	c.Param = url.Values{}
+	c.paramMap = nil
+	c.StageVariables = nil
+	c.RealIp = ""
+
+	// RESPONSE
+	c.responseHeader = http.Header{}
+	return c
+}
+
+func (c *Context) Copy() *Context {
+	newCtx := &Context{
+		m:              sync.Map{},
+		Headers:        c.Headers,
+		request:        c.request,
+		Method:         c.Method,
+		requestId:      c.requestId,
+		traceId:        c.traceId,
+		serviceId:      c.serviceId,
+		path:           c.path,
+		Body:           c.Body,
+		Query:          c.Query,
+		queryMap:       c.queryMap,
+		Param:          c.Param,
+		paramMap:       c.paramMap,
+		StageVariables: c.StageVariables,
+		RealIp:         c.RealIp,
+		responseHeader: c.responseHeader,
+	}
+
+	c.m.Range(func(key, value interface{}) bool {
+		newCtx.Set(key, value)
+		return true
+	})
+
 	return c
 }
 

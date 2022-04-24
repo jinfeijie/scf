@@ -5,6 +5,7 @@ import (
 	"github.com/tencentyun/scf-go-lib/cloudfunction"
 	"net/http"
 	"reflect"
+	"sync"
 )
 
 type Handler func(ctx *Context) Reply
@@ -21,12 +22,22 @@ const (
 
 type Scf struct {
 	TrafficMode TrafficModeType
+	pool        sync.Pool
 }
 
 func New() *Scf {
-	return &Scf{
+	scf := &Scf{
 		TrafficMode: TrafficModeServe,
+		pool:        sync.Pool{},
 	}
+	scf.pool.New = func() interface{} {
+		return scf.allocateContext()
+	}
+	return scf
+}
+
+func (scf *Scf) allocateContext() *Context {
+	return &Context{}
 }
 
 func (scf *Scf) Use(handlers ...Handler) {
@@ -139,7 +150,11 @@ func (scf *Scf) SetTrafficMode(modeType TrafficModeType) {
 }
 
 func (scf *Scf) Server(_ context.Context, r *Req) (Reply, error) {
-	ctx := NewContext(r)
+	ctx := scf.pool.Get().(*Context)
+	ctx.Reset()
+	ctx.BuildCtx(r)
+	defer scf.pool.Put(ctx)
+
 	method := r.HttpMethod
 	route, exist := router[method]
 	if !exist {
