@@ -2,15 +2,16 @@ package scf
 
 import (
 	"context"
+	"github.com/spf13/cast"
 	"github.com/tencentyun/scf-go-lib/cloudfunction"
-	"net/http"
+	"github.com/tencentyun/scf-go-lib/events"
 	"reflect"
 	"sync"
 )
 
 type Handler func(ctx *Context) Reply
 
-var router = make(map[string]map[string]Handler)
+//var router = make(map[string]map[string]Handler)
 
 type TrafficModeType int
 
@@ -23,12 +24,14 @@ const (
 type Scf struct {
 	TrafficMode TrafficModeType
 	pool        sync.Pool
+	*Router
 }
 
 func New() *Scf {
 	scf := &Scf{
 		TrafficMode: TrafficModeServe,
 		pool:        sync.Pool{},
+		Router:      NewRouter(),
 	}
 	scf.pool.New = func() interface{} {
 		return scf.allocateContext()
@@ -37,50 +40,14 @@ func New() *Scf {
 }
 
 func (scf *Scf) allocateContext() *Context {
-	return &Context{}
+	v := make(Params, 0, 1)
+	return &Context{
+		params: &v,
+	}
 }
 
 func (scf *Scf) Use(handlers ...Handler) {
 
-}
-
-func (scf *Scf) Route(method, path string, handler Handler) {
-	if router[method] == nil {
-		router[method] = make(map[string]Handler)
-	}
-	router[method][path] = handler
-}
-
-func (scf *Scf) GET(path string, handler Handler) {
-	scf.Route(http.MethodGet, path, handler)
-}
-
-func (scf *Scf) POST(path string, handler Handler) {
-	scf.Route(http.MethodPost, path, handler)
-}
-
-func (scf *Scf) OPTIONS(path string, handler Handler) {
-	scf.Route(http.MethodOptions, path, handler)
-}
-
-func (scf *Scf) PUT(path string, handler Handler) {
-	scf.Route(http.MethodPut, path, handler)
-}
-
-func (scf *Scf) DELETE(path string, handler Handler) {
-	scf.Route(http.MethodDelete, path, handler)
-}
-
-func (scf *Scf) HEAD(path string, handler Handler) {
-	scf.Route(http.MethodHead, path, handler)
-}
-
-func (scf *Scf) ANY(path string, handler Handler) {
-	scf.GET(path, handler)
-	scf.POST(path, handler)
-	scf.PUT(path, handler)
-	scf.DELETE(path, handler)
-	scf.HEAD(path, handler)
 }
 
 func (scf *Scf) Run() {
@@ -121,19 +88,19 @@ func (scf *Scf) ServerWarp(ctx context.Context, r *Req) (resp map[string]interfa
 			}
 		}
 
-		headers := make(map[string]interface{})
+		headers := make(map[string]string)
 		for key, value := range Map(Json(header)) {
 			valueOf := reflect.ValueOf(value)
 			if valueOf.Len() == 1 {
-				headers[key] = valueOf.Index(0).Interface()
+				headers[key] = cast.ToString(valueOf.Index(0).Interface())
 			} else {
-				headers[key] = value
+				headers[key] = cast.ToString(value)
 			}
 		}
 
 		headers["Content-Type"] = contentType
 
-		gw := GWReply{
+		gw := events.APIGatewayResponse{
 			IsBase64Encoded: false,
 			StatusCode:      rly.Code,
 			Headers:         headers,
@@ -156,14 +123,16 @@ func (scf *Scf) Server(_ context.Context, r *Req) (Reply, error) {
 	defer scf.pool.Put(ctx)
 
 	method := r.HttpMethod
-	route, exist := router[method]
-	if !exist {
-		return ctx.NotFound(), nil
-	}
+	if route, exist := scf.trees[method]; exist {
+		handle, ps, _ := route.getValue(r.Path, ctx.params)
+		if handle == nil {
+			return ctx.NotFound(), nil
+		}
 
-	handler, handlerExist := route[r.Path]
-	if !handlerExist {
-		return ctx.NotFound(), nil
+		if ps != nil {
+			ctx.params = ps
+		}
+		return handle(ctx), nil
 	}
-	return handler(ctx), nil
+	return ctx.NotFound(), nil
 }

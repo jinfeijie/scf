@@ -28,6 +28,8 @@ type Context struct {
 	StageVariables map[string]string
 	RealIp         string
 
+	params *Params
+
 	// RESPONSE
 	responseHeader http.Header
 }
@@ -46,6 +48,7 @@ func (c *Context) Reset() *Context {
 	c.queryMap = nil
 	c.Param = url.Values{}
 	c.paramMap = nil
+	*c.params = (*c.params)[:0]
 	c.StageVariables = nil
 	c.RealIp = ""
 
@@ -146,6 +149,10 @@ func (c *Context) GetBody() io.ReadCloser {
 
 func (c *Context) GetQuery(key string) string {
 	return c.Query.Get(key)
+}
+
+func (c *Context) GetParams(key string) string {
+	return c.params.ByName(key)
 }
 
 func (c *Context) BuildCtx(r *Req) {
