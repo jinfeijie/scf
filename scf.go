@@ -11,7 +11,7 @@ import (
 
 type Handler func(ctx *Context) Reply
 
-//var router = make(map[string]map[string]Handler)
+const Author = "jinfeijie"
 
 type TrafficModeType int
 
@@ -21,15 +21,26 @@ const (
 	TrafficModeServe
 )
 
+type RunModeType int
+
+const (
+	RunModeTypeUnknown = RunModeType(iota)
+	RunModeDebug
+	RunModeTest
+	RunModeRelease
+)
+
 type Scf struct {
-	TrafficMode TrafficModeType
+	trafficMode TrafficModeType
+	runMode     RunModeType
 	pool        sync.Pool
 	*Router
 }
 
 func New() *Scf {
 	scf := &Scf{
-		TrafficMode: TrafficModeServe,
+		trafficMode: TrafficModeServe,
+		runMode:     RunModeDebug,
 		pool:        sync.Pool{},
 		Router:      NewRouter(),
 	}
@@ -46,8 +57,9 @@ func (scf *Scf) allocateContext() *Context {
 	}
 }
 
+// Use mw TODO
 func (scf *Scf) Use(handlers ...Handler) {
-
+	// TODO
 }
 
 func (scf *Scf) Run() {
@@ -75,7 +87,7 @@ func (scf *Scf) ServerWarp(ctx context.Context, r *Req) (resp map[string]interfa
 	rly.Header = nil
 	resp = make(map[string]interface{})
 	resp = Map(Json(rly))
-	switch scf.TrafficMode {
+	switch scf.trafficMode {
 	case TrafficModeGW:
 		body := ""
 		switch contentType {
@@ -100,6 +112,10 @@ func (scf *Scf) ServerWarp(ctx context.Context, r *Req) (resp map[string]interfa
 
 		headers["Content-Type"] = contentType
 
+		if scf.runMode == RunModeDebug {
+			headers["X-Powered-By"] = Author
+		}
+
 		gw := events.APIGatewayResponse{
 			IsBase64Encoded: false,
 			StatusCode:      rly.Code,
@@ -113,7 +129,10 @@ func (scf *Scf) ServerWarp(ctx context.Context, r *Req) (resp map[string]interfa
 }
 
 func (scf *Scf) SetTrafficMode(modeType TrafficModeType) {
-	scf.TrafficMode = modeType
+	scf.trafficMode = modeType
+}
+func (scf *Scf) GetTrafficMode() TrafficModeType {
+	return scf.trafficMode
 }
 
 func (scf *Scf) Server(_ context.Context, r *Req) (Reply, error) {
@@ -135,4 +154,12 @@ func (scf *Scf) Server(_ context.Context, r *Req) (Reply, error) {
 		return handle(ctx), nil
 	}
 	return ctx.NotFound(), nil
+}
+
+func (scf *Scf) SetMode(modeType RunModeType) {
+	scf.runMode = modeType
+}
+
+func (scf *Scf) GetMode() RunModeType {
+	return scf.runMode
 }
